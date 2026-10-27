@@ -104,6 +104,14 @@ body.leaving main{opacity:0;filter:blur(4px);transition:opacity 140ms ease,filte
 .eye3d canvas{position:absolute;inset:0;width:100%;height:100%;display:block;filter:grayscale(1) contrast(1.08)}
 .eye-fallback{width:min(320px,60vw);height:auto}
 .eye3d.gl .eye-fallback{display:none}
+.eye3d:not(.nogl) .eye-fallback{visibility:hidden}
+/* pantalla de carga: se abre directo con el ojo en 3D */
+#load{position:fixed;inset:0;z-index:55;background:var(--ink);display:grid;place-content:center;justify-items:center;gap:16px;transition:opacity .7s var(--ease-io,ease),visibility .7s}
+#load.done{opacity:0;visibility:hidden;pointer-events:none}
+#load .load-k{font-size:10px;letter-spacing:.32em;text-transform:uppercase;color:var(--ash);animation:loadk 2.2s ease-in-out infinite}
+#load .load-bar{display:block;width:120px;height:1px;background:rgba(255,255,255,.12);overflow:hidden}
+#load .load-bar b{display:block;height:100%;width:0;background:var(--bone);transition:width .3s ease}
+@keyframes loadk{0%,100%{opacity:.45}50%{opacity:1}}
 .mark-under{position:absolute;top:calc(50% + min(150px,27vw));width:min(170px,40vw);height:auto;will-change:opacity}
 .final{position:absolute;display:grid;justify-items:center;gap:14px;text-align:center;opacity:0;will-change:opacity,transform}
 .final .r{font-family:var(--roman);font-weight:300;font-size:clamp(96px,16vw,190px);line-height:.8}
@@ -264,7 +272,7 @@ html,body{overflow-x:clip}
   .relic-chain{width:118px;right:-34px;opacity:.42}
   [data-view="misa"] .page{padding-right:56px}
   [data-view="archivo"] .relic-track{width:84px;right:-22px;opacity:.22}
-  [data-view="registro"] .relic-track{opacity:.5;z-index:0}
+  [data-view="registro"] .relic-track{opacity:1;z-index:3}
   .arch-wrap,.reel,.am-list,.strip{position:relative;z-index:1}
   .arch thead{display:none}
   .arch,.arch tbody{display:block}
@@ -296,6 +304,17 @@ html,body{overflow-x:clip}
 </head>
 <body>
 <div id="grain" aria-hidden="true"></div>
+<div id="load" aria-hidden="true"><span class="load-k">Abriendo la misa</span><i class="load-bar"><b id="loadb"></b></i></div>
+<script>
+(function(){
+  var el=document.getElementById("load"), bar=document.getElementById("loadb"), off=false;
+  function done(){ if(off)return; off=true; bar.style.width="100%"; setTimeout(function(){el.classList.add("done")},250); }
+  window.__load={set:function(p){ if(!off)bar.style.width=Math.round(Math.min(.92,p)*100)+"%"; },done:done};
+  var h=(location.hash||"").replace("#","");
+  if(h&&h!=="inicio"){ addEventListener("DOMContentLoaded",function(){setTimeout(done,350)}); }
+  setTimeout(function(){ var e=document.getElementById("eye3d"); if(e&&!e.classList.contains("gl"))e.classList.add("nogl"); done(); },15000);
+})();
+</script>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
@@ -537,7 +556,8 @@ html,body{overflow-x:clip}
 /* ojo de metal en 3D: extruido del isotipo real, gira sobre su eje y se acerca con el scroll */
 (function(){
   var host=document.getElementById("eye3d");
-  if(!host||!window.THREE||!THREE.GLTFLoader)return;
+  function noGL(){ if(host)host.classList.add("nogl"); window.__load&&window.__load.done(); }
+  if(!host||!window.THREE||!THREE.GLTFLoader){noGL();return;}
   var reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var renderer;
   try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:"high-performance"})}catch(e){return}
@@ -598,7 +618,11 @@ html,body{overflow-x:clip}
   var mat=new THREE.MeshStandardMaterial({color:0xe6e6e4,metalness:1,roughness:1,roughnessMap:brushed,envMapIntensity:1.25});
 
   /* modelo 3D generado con Higgsfield a partir de los renders en metal */
-  fetch("assets/eye-glb.txt").then(function(r){return r.text()}).then(function(b64){
+  new Promise(function(ok,ko){
+    var x=new XMLHttpRequest(); x.open("GET","assets/eye-glb.txt");
+    x.onprogress=function(e){ if(window.__load)window.__load.set(e.lengthComputable?e.loaded/e.total:Math.min(.9,e.loaded/4600000)); };
+    x.onload=function(){ x.status<400?ok(x.responseText):ko(x.status) }; x.onerror=ko; x.send();
+  }).then(function(b64){
     var bin=atob(b64.trim()), buf=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++)buf[i]=bin.charCodeAt(i);
     new THREE.GLTFLoader().parse(buf.buffer,"",function(gltf){
     var obj=gltf.scene;
@@ -611,8 +635,9 @@ html,body{overflow-x:clip}
     pivot.add(holder);
     host.classList.add("gl");
     resize(); start();
-    },function(){});
-  }).catch(function(){});
+    requestAnimationFrame(function(){requestAnimationFrame(function(){window.__load&&window.__load.done()})});
+    },noGL);
+  }).catch(noGL);
 
   function resize(){
     var w=host.clientWidth,h=host.clientHeight; if(!w||!h)return;
@@ -1062,7 +1087,7 @@ html,body{overflow-x:clip}
   addEventListener("resize",onScroll);
 
   /* ES / EN */
-  var EN={"Misa": "Mass", "Archivo": "Archive", "Calendario litúrgico": "Liturgical calendar", "Registro": "Gallery", "Contacto": "Contact", "Índice": "Index", "Cerrar": "Close", "Inicio": "Home", "Club de culto": "Cult club", "Próxima misa": "Next mass", "Fecha por anunciar": "Date to be announced", "Ver misa": "See mass", "Canal de difusión": "Broadcast channel", "Line up": "Line-up", "Apertura": "Doors", "Edad": "Age", "Entradas": "Tickets", "Cap.": "Ch.", "Fecha": "Date", "Suspendida": "Cancelled", "Copiar": "Copy", "Cerrada": "Closed", "Discípulos": "Disciples", "Cierre de temporada": "Season closing", "Formato boiler": "Boiler format", "Misa de Halloween": "Halloween mass", "Entradas": "Tickets", "Tu compra": "Your order", "Total": "Total", "Nombre y apellido": "Full name", "Pagar con Mercado Pago": "Pay with Mercado Pago", "Elegí tus entradas.": "Choose your tickets.", "Misa XXVI ·": "Mass XXVI ·", "· Apertura": "· Doors", "En esta web": "On this site", "Comprar entradas": "Buy tickets", "En destacadas": "In highlights", "Recomendamos": "We recommend", "· Para instruirte en el DJing": "· To train in DJing", "· Se anuncia en Instagram": "· Announced on Instagram", "Próximamente": "Coming soon", "Nos vemos en misa.": "See you at mass.", "SECTA, inicio": "SECTA, home", "Secciones": "Sections", "El ojo dentro del triángulo": "The eye inside the triangle", "Pista llena frente a la pantalla del club": "Packed floor in front of the club screen", "DJ en cabina": "DJ in the booth", "Dos DJs en cabina frente al público": "Two DJs in the booth facing the crowd", "Público bailando en la oscuridad": "Crowd dancing in the dark", "El club desde arriba, con la cabina y la pantalla al fondo": "The club from above, booth and screen at the back", "Público en la pista": "Crowd on the floor"};
+  var EN={"Misa": "Mass", "Archivo": "Archive", "Calendario litúrgico": "Liturgical calendar", "Registro": "Gallery", "Contacto": "Contact", "Índice": "Index", "Cerrar": "Close", "Inicio": "Home", "Club de culto": "Cult club", "Próxima misa": "Next mass", "Fecha por anunciar": "Date to be announced", "Ver misa": "See mass", "Canal de difusión": "Broadcast channel", "Line up": "Line-up", "Apertura": "Doors", "Edad": "Age", "Entradas": "Tickets", "Cap.": "Ch.", "Fecha": "Date", "Suspendida": "Cancelled", "Copiar": "Copy", "Cerrada": "Closed", "Discípulos": "Disciples", "Cierre de temporada": "Season closing", "Formato boiler": "Boiler format", "Misa de Halloween": "Halloween mass", "Entradas": "Tickets", "Tu compra": "Your order", "Total": "Total", "Nombre y apellido": "Full name", "Pagar con Mercado Pago": "Pay with Mercado Pago", "Elegí tus entradas.": "Choose your tickets.", "Misa XXVI ·": "Mass XXVI ·", "· Apertura": "· Doors", "En esta web": "On this site", "Comprar entradas": "Buy tickets", "En destacadas": "In highlights", "Recomendamos": "We recommend", "· Para instruirte en el DJing": "· To train in DJing", "· Se anuncia en Instagram": "· Announced on Instagram", "Próximamente": "Coming soon", "Nos vemos en misa.": "See you at mass.", "Abriendo la misa": "Opening the mass", "SECTA, inicio": "SECTA, home", "Secciones": "Sections", "El ojo dentro del triángulo": "The eye inside the triangle", "Pista llena frente a la pantalla del club": "Packed floor in front of the club screen", "DJ en cabina": "DJ in the booth", "Dos DJs en cabina frente al público": "Two DJs in the booth facing the crowd", "Público bailando en la oscuridad": "Crowd dancing in the dark", "El club desde arriba, con la cabina y la pantalla al fondo": "The club from above, booth and screen at the back", "Público en la pista": "Crowd on the floor"};
   var lang="es", nodes=[], attrEls=[];
   var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
     var p=n.parentNode; if(!p||/^(SCRIPT|STYLE)$/.test(p.nodeName))return NodeFilter.FILTER_REJECT;
